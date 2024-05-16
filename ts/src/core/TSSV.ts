@@ -550,8 +550,8 @@ export class Module {
     in: string | Sig
     out: string | Sig
     rShift: string | Sig | number
-  }, roundMode: 'roundUp' | 'roundDown' | 'roundToZero' = 'roundUp'): Sig {
-    if (roundMode !== 'roundUp') throw Error(`FIXME: ${roundMode} not implemented yet`)
+  }, roundMode: 'roundUp' | 'roundDown' | 'roundToZero' | 'roundToEven' = 'roundUp'): Sig {
+    // if (roundMode !== 'roundUp') throw Error(`FIXME: ${roundMode} not implemented yet`)
     const inSig = this.findSignal(io.in, true, this.addRound, true)
     const outSig = this.findSignal(io.out, true, this.addRound, true)
     const rShiftString = io.rShift.toString()
@@ -560,7 +560,24 @@ export class Module {
       if (rShiftSig.isSigned) throw Error(`right shift signal ${io.rShift.toString()} must be unsigned`)
     }
     if (inSig.isSigned !== outSig.isSigned) throw Error(`sign mode must match ${io.in.toString()}, ${io.out.toString()}`)
-    this.body += `   assign ${io.out.toString()} = ${outSig.width}'((${io.in.toString()} + (${inSig.width}'d1<<(${rShiftString}-1)))>>>${rShiftString});\n`
+    if (roundMode === 'roundToEven') {
+      this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}] + (${io.in.toString()}[${Number(io.rShift) - 1}] & (${io.in.toString()}[${rShiftString}] | &${io.in.toString()}[${Number(io.rShift) - 2} : 0]));\n`
+    } else if (roundMode === 'roundToZero') {
+      this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}];\n`
+    } else if (roundMode === 'roundUp') {
+      if (inSig.isSigned) {
+        this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}] + (~${io.in.toString()}[${Number(inSig.width) - 1}] & (${io.in.toString()}[${Number(io.rShift) - 1}] | &${io.in.toString()}[${Number(io.rShift) - 2} : 0]));\n`
+      } else {
+        this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}] + (${io.in.toString()}[${Number(io.rShift) - 1}] | &${io.in.toString()}[${Number(io.rShift) - 2} : 0]);\n`
+      }
+    } else if (roundMode === 'roundDown') {
+      if (inSig.isSigned) {
+        this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}] + (${io.in.toString()}[${Number(inSig.width) - 1}] & (${io.in.toString()}[${Number(io.rShift) - 1}] | &${io.in.toString()}[${Number(io.rShift) - 2} : 0]));\n`
+      } else {
+        this.body += `    assign ${io.out.toString()} = ${io.in.toString()}[${Number(inSig.width) - 1} : ${rShiftString}];\n`
+      }
+    }
+    // this.body += `   assign ${io.out.toString()} = ${outSig.width}'((${io.in.toString()} + (${inSig.width}'d1<<(${rShiftString}-1)))>>>${rShiftString});\n`
     if (typeof io.out === 'string') {
       return new Sig(io.out)
     }
